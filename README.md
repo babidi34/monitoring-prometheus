@@ -1,13 +1,17 @@
+Here’s the updated **README** to include the modification of the `inventory.ini` file before running the playbooks.
+
+---
+
 # Project: Node Exporter Secure Deployment and Prometheus Update
 
 This project is designed to securely deploy **Node Exporter** instances on client servers and update the **Prometheus** instance on the Linux-Man infrastructure to scrape metrics from those client servers.
 
-For each client, you will clone the repository into the client folder, modify the configuration file based on the client environment, and then run the Ansible playbooks to generate certificates, deploy the Node Exporter, and update Prometheus with the new target.
+For each client, you will clone the repository into the client folder, modify the configuration file based on the client environment, update the inventory file to reflect the client’s server details, and then run the Ansible playbooks to generate certificates, deploy the Node Exporter, and update Prometheus with the new target.
 
 ## Objectives:
 1. **Securely deploy Node Exporter**: Generate and deploy TLS certificates to client servers and configure Node Exporter to expose metrics over HTTPS.
 2. **Prometheus target update**: Add the new client servers as scrape targets in the **Prometheus** configuration on the Linux-Man infrastructure, using secure TLS settings.
-3. **Client-specific project management**: For each client, clone the repository, update the configuration file, and execute the Ansible playbooks.
+3. **Client-specific project management**: For each client, clone the repository, update the configuration and inventory files, and execute the Ansible playbooks.
 
 ---
 
@@ -28,24 +32,17 @@ For each client, you will clone the repository into the client folder, modify th
    cd node-exporter-secure
    ```
 
-### Step 2: Customize the Variables
+### Step 2: Modify the `variables.yml`
 
 1. Edit the `variables.yml` file to match the specific client details. 
-   - Update the following values based on the client environment:
-     - **client_name**: The client's name or project name.
-     - **node_exporter_version**: Version of the Node Exporter to deploy.
-     - **node_exporter_web_listen_address**: Address and port for Node Exporter to listen on (usually `0.0.0.0:9100`).
-     - **prometheus_scrape_configs**: The target servers and their labels.
-   
+   - Update values such as **client_name**, **node_exporter_version**, **prometheus_scrape_configs**, etc.
+
    Example:
    ```yaml
    ---
    client_name: "client-xyz"
-
    node_exporter_version: "1.8.2"
    node_exporter_web_listen_address: "0.0.0.0:9100"
-   node_exporter_web_telemetry_path: "/metrics"
-   node_exporter_system_user: root
    node_exporter_cert_dir: /etc/node_exporter/
 
    prometheus_scrape_configs:
@@ -65,22 +62,44 @@ For each client, you will clone the repository into the client folder, modify th
              client: "{{ client_name }}"
    ```
 
-### Step 3: Generate Certificates
+### Step 3: Modify the `inventory.ini`
+
+1. **Edit the `inventory.ini` file** to reflect the client’s infrastructure. Update the IP addresses, usernames, and paths to the SSH private keys as required.
+
+   Example `inventory.ini`:
+   ```ini
+   [clients]
+   client-server-1 ansible_host=192.168.56.101 ansible_user=admin
+   client-server-2 ansible_host=192.168.56.102 ansible_user=admin
+
+   [clients:vars]
+   ansible_ssh_private_key_file=/path/to/private/key
+
+   [prometheus]
+   prometheus-server ansible_host=192.168.56.101 ansible_user=admin
+
+   [prometheus:vars]
+   ansible_ssh_private_key_file=/path/to/private/key
+   ```
+
+   This step ensures that Ansible knows how to connect to the correct servers for the client and for Prometheus.
+
+### Step 4: Generate Certificates
 
 1. Run the **generate-certs.yml** playbook to generate TLS certificates for the client’s Node Exporter instance:
    ```bash
    ansible-playbook playbooks/generate-certs.yml -e @variables.yml
    ```
 
-### Step 4: Deploy Node Exporter
+### Step 5: Deploy Node Exporter
 
 1. Run the **node-exporter.yml** playbook to install Node Exporter on the client's server and configure it with TLS.
    - Ensure that you have the correct SSH access and inventory setup for the client’s server:
    ```bash
-   ansible-playbook playbooks/node-exporter.yml -e @variables.yml -i inventory/clients
+   ansible-playbook playbooks/node-exporter.yml -e @variables.yml -i inventory.ini
    ```
 
-### Step 5: Update Prometheus
+### Step 6: Update Prometheus
 
 1. Run the **update-prometheus.yml** playbook to add the client’s server as a scrape target for your Prometheus instance:
    ```bash
@@ -89,7 +108,7 @@ For each client, you will clone the repository into the client folder, modify th
 
 2. Prometheus will be updated with the new scrape configuration, and it will start pulling metrics securely from the client's Node Exporter.
 
-### Step 6: Monitor the Results
+### Step 7: Monitor the Results
 
 1. **Verify the Node Exporter**:
    - Navigate to `https://<client-server>:9100/metrics` to ensure that the Node Exporter is serving metrics over HTTPS.
@@ -119,16 +138,18 @@ For each client, you will clone the repository into the client folder, modify th
 cd /path/to/client-folder
 
 # Clone the repository
-git clone https://gitlab.com/linux-man/node-exporter-secure.git
+git clone git@gitlab.com:babidi34/monitoring-prometheus.git
 cd node-exporter-secure
 
 # Edit the variables.yml file for the client
+
+# Edit the inventory.ini file to configure client and Prometheus servers
 
 # Generate TLS certificates
 ansible-playbook playbooks/generate-certs.yml -e @variables.yml
 
 # Deploy Node Exporter
-ansible-playbook playbooks/node-exporter.yml -e @variables.yml -i inventory/clients
+ansible-playbook playbooks/node-exporter.yml -e @variables.yml -i inventory.ini
 
 # Update Prometheus scrape targets
 ansible-playbook playbooks/update-prometheus.yml -e @variables.yml
