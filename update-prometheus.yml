@@ -1,0 +1,106 @@
+---
+- name: Update Prometheus scrape_configs
+  hosts: prometheus
+  become: true
+  vars_files:
+    - secrets.yml
+    - variables.yml
+  vars:
+    prometheus_cert_dir: "{{ prometheus_config_dir }}/ssl/{{ client_name }}"
+
+    ca_cert_path: "{{ prometheus_cert_dir }}/ca-cert.crt"
+    prometheus_tls_cert_path: "{{ prometheus_cert_dir }}/client-cert.crt"
+    prometheus_tls_key_path: "{{ prometheus_cert_dir }}/client-key.key"
+
+    prometheus_config_dir: "/etc/prometheus"
+    prometheus_config_file: "{{ prometheus_config_dir }}/prometheus.yml"
+
+    prometheus_system_user: prometheus
+
+  pre_tasks:
+    - name: Create Prometheus user
+      user:
+        name: prometheus
+        comment: Prometheus User
+        shell: /usr/sbin/nologin
+        system: true
+        create_home: false
+
+    - name: Créer le répertoire pour les certificats TLS
+      file:
+        path: "{{ prometheus_cert_dir }}"
+        state: directory
+        recurse: true
+        mode: '0700'
+        owner: "{{ prometheus_system_user }}"
+        group: "{{ prometheus_system_user }}"
+
+    - name: Copier le certificat CA
+      copy:
+        content: "{{ ca_cert }}"
+        dest: "{{ ca_cert_path }}"
+        mode: '0640'
+        owner: "{{ prometheus_system_user }}"
+        group: "{{ prometheus_system_user }}"
+
+    - name: Copier le certificat client de Prometheus
+      copy:
+        content: "{{ prometheus_tls_cert }}"
+        dest: "{{ prometheus_tls_cert_path }}"
+        mode: '0640'
+        owner: "{{ prometheus_system_user }}"
+        group: "{{ prometheus_system_user }}"
+
+    - name: Copier la clé privée du client Prometheus
+      copy:
+        content: "{{ prometheus_tls_key }}"
+        dest: "{{ prometheus_tls_key_path }}"
+        mode: '0400'
+        owner: "{{ prometheus_system_user }}"
+        group: "{{ prometheus_system_user }}"
+
+  tasks:
+    - name: Read the current Prometheus config file
+      slurp:
+        path: "{{ prometheus_config_file }}"
+      register: current_prometheus_config
+      tags: config
+
+    - name: Convert the Prometheus config file from base64
+      set_fact:
+        current_prometheus_config_content: "{{ current_prometheus_config.content | b64decode }}"
+      tags: config
+
+    - name: Check if scrape_configs already exist in the config
+      set_fact:
+        scrape_configs_exist: "{{ prometheus_scrape_configs | to_yaml in current_prometheus_config_content }}"
+      tags: config
+
+    - name: Update Prometheus config with scrape_configs if not present
+      block:
+        - name: Backup Prometheus config file
+          copy:
+            src: "{{ prometheus_config_file }}"
+            dest: "{{ prometheus_config_file }}.bak"
+            remote_src: true
+          tags: config
+
+        - name: Add scrape_configs to Prometheus config
+          lineinfile:
+            path: "{{ prometheus_config_file }}"
+            regexp: '^scrape_configs:'
+            insertbefore: '^rule_files:'
+            line: |
+              scrape_configs:
+                {{ prometheus_scrape_configs | to_nice_yaml(indent=2) | indent(2) }}
+            state: present
+          when: not scrape_configs_exist
+          notify: reload prometheus
+      when: not scrape_configs_exist
+      tags: config
+
+  handlers:
+    - name: reload prometheus
+      systemd:
+        name: prometheus
+        state: reloaded

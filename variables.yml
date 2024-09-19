@@ -1,0 +1,24 @@
+---
+client_name: linux-man
+
+node_exporter_version: 1.8.2
+node_exporter_web_listen_address: "0.0.0.0:9100"
+node_exporter_web_telemetry_path: "/metrics"
+node_exporter_system_user: root
+node_exporter_cert_dir: /etc/node_exporter/
+
+prometheus_scrape_configs:
+  - job_name: "debian12-test-system"
+    metrics_path: "/metrics"
+    scheme: https
+    tls_config:
+      ca_file: "{{ ca_cert_path }}"
+      cert_file: "{{ prometheus_tls_cert_path }}"
+      key_file: "{{ prometheus_tls_key_path }}"
+    static_configs:
+      - targets:
+          - "labo-home.linux-man.fr:9100"
+        labels:
+          job: "linux-man-vagrant"
+          environment: "test"
+          client: "{{ client_name }}"

@@ -1,0 +1,157 @@
+---
+- name: Generate certificates for CA, Node Exporter, and Prometheus
+  hosts: localhost
+  gather_facts: false
+  vars:
+    prometheus_auth_username: admin
+    prometheus_auth_password: mypassword
+
+    vars_file_path: "{{ playbook_dir }}/secrets.yml"
+
+    cert_dir: "{{ playbook_dir }}/ssl/monito_prometheus"
+
+    ca_cert_path: "{{ cert_dir }}/ca-cert.crt"
+    ca_key_path: "{{ cert_dir }}/ca-key.key"
+    node_cert_path: "{{ cert_dir }}/node-cert.crt"
+    node_key_path: "{{ cert_dir }}/node-key.key"
+    prometheus_cert_path: "{{ cert_dir }}/prometheus-cert.crt"
+    prometheus_key_path: "{{ cert_dir }}/prometheus-key.key"
+    node_csr_path: "{{ cert_dir }}/node.csr"
+    prometheus_csr_path: "{{ cert_dir }}/prometheus.csr"
+
+    # SAN variables
+    node_san: "IP:192.168.56.179,IP:192.168.56.182,DNS:*.linux-man.fr"
+    prometheus_san: "IP:192.168.56.179,IP:192.168.56.182,DNS:*.linux-man.fr"
+
+  tasks:
+    - name: Create a temporary directory for certificates
+      file:
+        path: "{{ cert_dir }}"
+        state: directory
+        mode: '0700'
+
+    - name: Generate CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ ca_key_path }}"
+        type: Ed25519
+        size: 2048
+
+    - name: Create certificate signing request (CSR) for CA certificate
+      community.crypto.openssl_csr_pipe:
+        privatekey_path: "{{ ca_key_path }}"
+        common_name: Prometheus CA
+        use_common_name_for_san: false  # since we do not specify SANs, don't use CN as a SAN
+        basic_constraints:
+          - 'CA:TRUE'
+        basic_constraints_critical: true
+        key_usage:
+          - keyCertSign
+        key_usage_critical: true
+      register: ca_csr
+
+    - name: Generate CA certificate (self-signed)
+      community.crypto.x509_certificate:
+        path: "{{ ca_cert_path }}"
+        privatekey_path: "{{ ca_key_path }}"
+        csr_content: "{{ ca_csr.csr }}"
+        selfsigned_not_before: "+0s"
+        selfsigned_not_after: "+3650d"
+        selfsigned_version: 3
+        selfsigned_create_subject_key_identifier: create_if_not_provided
+        provider: selfsigned
+
+    - name: Generate Node Exporter private key
+      community.crypto.openssl_privatekey:
+        path: "{{ node_key_path }}"
+        size: 2048
+
+    - name: Generate Node Exporter CSR
+      community.crypto.openssl_csr:
+        path: "{{ node_csr_path }}"
+        privatekey_path: "{{ node_key_path }}"
+        subject:
+          CN: "prometheus"
+        subject_alt_name: "{{ node_san }}"
+
+    - name: Sign the Node Exporter certificate with the CA
+      community.crypto.x509_certificate:
+        path: "{{ node_cert_path }}"
+        csr_path: "{{ node_csr_path }}"
+        ownca_path: "{{ ca_cert_path }}"
+        ownca_privatekey_path: "{{ ca_key_path }}"
+        ownca_not_before: "+0s"
+        ownca_not_after: "+3650d"
+        provider: ownca
+
+    - name: Generate Prometheus private key
+      community.crypto.openssl_privatekey:
+        path: "{{ prometheus_key_path }}"
+        size: 2048
+
+    - name: Generate Prometheus CSR
+      community.crypto.openssl_csr:
+        path: "{{ prometheus_csr_path }}"
+        privatekey_path: "{{ prometheus_key_path }}"
+        subject:
+          CN: "prometheus"
+        subject_alt_name: "{{ prometheus_san }}"
+
+    - name: Sign the Prometheus certificate with the CA
+      community.crypto.x509_certificate:
+        path: "{{ prometheus_cert_path }}"
+        csr_path: "{{ prometheus_csr_path }}"
+        ownca_path: "{{ ca_cert_path }}"
+        ownca_privatekey_path: "{{ ca_key_path }}"
+        ownca_not_before: "+0s"
+        ownca_not_after: "+3650d"
+        provider: ownca
+
+    - name: Read the CA certificate
+      slurp:
+        src: "{{ ca_cert_path }}"
+      register: ca_cert_content
+
+    - name: Read the Node Exporter private key
+      slurp:
+        src: "{{ node_key_path }}"
+      register: node_key_content
+
+    - name: Read the Node Exporter certificate
+      slurp:
+        src: "{{ node_cert_path }}"
+      register: node_cert_content
+
+    - name: Read the Prometheus private key
+      slurp:
+        src: "{{ prometheus_key_path }}"
+      register: prometheus_key_content
+
+    - name: Read the Prometheus certificate
+      slurp:
+        src: "{{ prometheus_cert_path }}"
+      register: prometheus_cert_content
+
+    - name: Update Ansible Vault with the certificates and keys
+      copy:
+        dest: "{{ vars_file_path }}"
+        content: |
+          ---
+
+          ca_cert: |
+            {{ ca_cert_content['content'] | b64decode | indent(2) }}
+          node_tls_cert: |
+            {{ node_cert_content['content'] | b64decode | indent(2) }}
+          node_tls_key: |
+            {{ node_key_content['content'] | b64decode | indent(2) }}
+          prometheus_tls_cert: |
+            {{ prometheus_cert_content['content'] | b64decode | indent(2) }}
+          prometheus_tls_key: |
+            {{ prometheus_key_content['content'] | b64decode | indent(2) }}
+          prometheus_auth_username: {{ prometheus_auth_username }}
+          prometheus_auth_password: {{ prometheus_auth_password }}
+      no_log: true
+
+    - name: Remove the temporary certificate files
+      file:
+        path: "{{ cert_dir }}"
+        state: absent
