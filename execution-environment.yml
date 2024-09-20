@@ -1,0 +1,26 @@
+version: 3
+
+images:
+  base_image:
+    name: ghcr.io/ansible-community/community-ee-minimal:2.16.0-1
+
+dependencies:
+  galaxy:
+    collections:
+      - name: prometheus.prometheus
+      - name: community.crypto
+
+  python:
+    - cryptography
+    - ansible
+
+  system:
+    - git
+    - openssl
+
+additional_build_steps:
+  prepend_base:
+    - RUN yum install -y git openssl
+  append_final:
+    - RUN groupadd --gid 1000 vscode
+    - RUN adduser --home-dir /vscode --create-home --gid 1000 --uid 1000 vscode
