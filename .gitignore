@@ -1,0 +1,6 @@
+secrets-test.yml
+.inventory.ini
+.vscode*
+secrets.ymls
+artifacts*
+context*

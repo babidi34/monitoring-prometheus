@@ -51,12 +51,12 @@ After building the execution environment, use Ansible Runner to execute the play
    Replace `<playbook_name>` with the appropriate playbook (e.g., `generate-certs.yml`, `node-exporter.yml`, `update-prometheus.yml`), and provide the necessary variables and inventory file.
 
    ```bash
-   ansible-runner run . --playbook <playbook_name> -e @variables.yml -i inventory.ini --container-image monitoring-ee:latest
+   ansible-runner run . --playbook <playbook_name>  --inventory inventory.ini --container-image monitoring-ee:latest
    ```
 
    Example:
    ```bash
-   ansible-runner run . --playbook node-exporter.yml -e @variables.yml -i inventory.ini --container-image monitoring-ee:latest
+   ansible-runner run . --playbook node-exporter.yml  --inventory inventory.ini --container-image monitoring-ee:latest
    ```
 
    This command runs the playbook in the containerized environment, ensuring all dependencies are properly handled.
@@ -90,21 +90,21 @@ Edit the `inventory.ini` file to reflect the client’s infrastructure. Update t
 
 1. **Run the `generate-certs.yml` playbook** to generate TLS certificates for the client’s Node Exporter instance:
    ```bash
-   ansible-runner run . --playbook generate-certs.yml -e @variables.yml --container-image monitoring-ee:latest
+   ansible-runner run . --playbook generate-certs.yml  --container-image monitoring-ee:latest
    ```
 
 ### Step 5: Deploy Node Exporter
 
 1. **Run the `node-exporter.yml` playbook** to install and configure Node Exporter on the client’s server with TLS:
    ```bash
-   ansible-runner run . --playbook node-exporter.yml -e @variables.yml -i inventory.ini --container-image monitoring-ee:latest
+   ansible-runner run . --playbook node-exporter.yml  --inventory inventory.ini --container-image monitoring-ee:latest
    ```
 
 ### Step 6: Update Prometheus
 
 1. **Run the `update-prometheus.yml` playbook** to add the client’s server to Prometheus' scrape targets:
    ```bash
-   ansible-runner run . --playbook update-prometheus.yml -e @variables.yml --container-image monitoring-ee:latest
+   ansible-runner run . --playbook update-prometheus.yml  --container-image monitoring-ee:latest
    ```
 
 ### Step 7: Monitor the Results
@@ -129,13 +129,13 @@ cd node-exporter-secure
 ansible-builder build --tag monitoring-ee:latest
 
 # Generate TLS certificates
-ansible-runner run . --playbook generate-certs.yml -e @variables.yml --container-image monitoring-ee:latest
+ansible-runner run . --playbook generate-certs.yml  --container-image monitoring-ee:latest
 
 # Deploy Node Exporter
-ansible-runner run . --playbook node-exporter.yml -e @variables.yml -i inventory.ini --container-image monitoring-ee:latest
+ansible-runner run . --playbook node-exporter.yml  --inventory inventory.ini --container-image monitoring-ee:latest
 
 # Update Prometheus scrape targets
-ansible-runner run . --playbook update-prometheus.yml -e @variables.yml --container-image monitoring-ee:latest
+ansible-runner run . --playbook update-prometheus.yml  --container-image monitoring-ee:latest
 ```
 
 ---
